@@ -29,8 +29,17 @@ export default function Perfil() {
         cotizacion: String(data.cotizacion ?? ""),
       });
     } catch (err) {
-      console.log("ERROR GET /perfil/me:", err?.response?.status, err?.response?.data);
-      setMsg(err?.response?.data?.message || "Error al cargar perfil");
+      const status = err?.response?.status;
+      const backendMsg = err?.response?.data?.message;
+
+      console.log("ERROR GET /perfil/me:", status, err?.response?.data);
+
+      // Si no existe perfil, lo informamos como aviso (no error)
+      if (status === 404) {
+        setMsg("⚠️ Perfil no encontrado. Completa los datos y presiona Guardar para crearlo.");
+      } else {
+        setMsg(backendMsg || "Error al cargar perfil");
+      }
     } finally {
       setLoading(false);
     }
@@ -47,23 +56,50 @@ export default function Perfil() {
   const guardar = async () => {
     setMsg("");
     setLoading(true);
-    try {
-      const payload = {
-        edad: Number(form.edad),
-        saldoActual: Number(form.saldoActual),
-        cotizacion: Number(form.cotizacion),
-      };
 
+    // Validaciones simples para evitar NaN
+    if (!form.edad || !form.saldoActual || !form.cotizacion) {
+      setLoading(false);
+      setMsg("⚠️ Completa Edad, Saldo actual y Cotización mensual antes de guardar.");
+      return;
+    }
+
+    const payload = {
+      edad: Number(form.edad),
+      saldoActual: Number(form.saldoActual),
+      cotizacion: Number(form.cotizacion),
+    };
+
+    try {
+      // 1) Intentar actualizar (si ya existe)
       const { data } = await api.put("/perfil/me", payload);
       console.log("PUT /perfil/me =>", data);
-
       setMsg("✅ Perfil actualizado");
 
-      // re-cargar desde backend para ver lo real guardado
       await cargarPerfil();
     } catch (err) {
-      console.log("ERROR PUT /perfil/me:", err?.response?.status, err?.response?.data);
-      setMsg(err?.response?.data?.message || "Error al guardar perfil");
+      const status = err?.response?.status;
+      const backendMsg = err?.response?.data?.message;
+
+      console.log("ERROR PUT /perfil/me:", status, err?.response?.data);
+
+      // 2) Si no existe perfil, lo creamos
+      if (status === 404) {
+        try {
+          const { data } = await api.post("/perfil/me", payload);
+          console.log("POST /perfil/me =>", data);
+          setMsg("✅ Perfil creado");
+
+          await cargarPerfil();
+        } catch (err2) {
+          const status2 = err2?.response?.status;
+          const backendMsg2 = err2?.response?.data?.message;
+          console.log("ERROR POST /perfil/me:", status2, err2?.response?.data);
+          setMsg(backendMsg2 || "Error al crear perfil");
+        }
+      } else {
+        setMsg(backendMsg || "Error al guardar perfil");
+      }
     } finally {
       setLoading(false);
     }
